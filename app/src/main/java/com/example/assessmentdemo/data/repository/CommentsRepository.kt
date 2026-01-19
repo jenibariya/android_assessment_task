@@ -12,7 +12,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class CommentRepository @Inject constructor(
+class CommentsRepository @Inject constructor(
     private val api: ApiService,
     private val dao: CommentDao,
     private val networkHelper: NetworkHelper

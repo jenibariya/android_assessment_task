@@ -5,13 +5,18 @@ import androidx.lifecycle.LiveData
 import com.example.assessmentdemo.data.local.posts.PostDao
 import com.example.assessmentdemo.data.local.posts.PostEntity
 import com.example.assessmentdemo.data.remote.ApiService
+import com.example.assessmentdemo.utils.NetworkHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class PostRepository @Inject constructor(
     private val apiService: ApiService,
-    private val postDao: PostDao
+    private val postDao: PostDao,
+    private val networkHelper: NetworkHelper
 ) {
 
     fun getPosts(): LiveData<List<PostEntity>> =
@@ -20,30 +25,31 @@ class PostRepository @Inject constructor(
     fun getFavorites(): LiveData<List<PostEntity>> =
         postDao.getFavoritePosts()
 
-    suspend fun fetchPostsFromApi() {
-        try {
-            val postsFromApi = apiService.getPosts()
+    fun fetchPostsFromApi() {
+        if (networkHelper.isNetworkAvailable()) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val postsFromApi = apiService.getPosts()
 
-            // 🔹 Preserve favorites from Room
-            val favoriteMap = postDao.getFavoriteMap()
-                .associate { it.id to it.isFavorite }
+                    val favoriteMap = postDao.getFavoriteMap()
+                        .associate { it.id to it.isFavorite }
 
-            val entities = postsFromApi.map {
-                PostEntity(
-                    id = it.id,
-                    userId = it.userId,
-                    title = it.title,
-                    body = it.body,
-                    isFavorite = favoriteMap[it.id] ?: false
-                )
+                    val entities = postsFromApi.map {
+                        PostEntity(
+                            id = it.id,
+                            userId = it.userId,
+                            title = it.title,
+                            body = it.body,
+                            isFavorite = favoriteMap[it.id] ?: false
+                        )
+                    }
+
+                    postDao.insertPosts(entities)
+
+                } catch (e: Exception) {
+                    Log.e("PostRepo", "Network unavailable, using cached posts")
+                }
             }
-
-            postDao.insertPosts(entities)
-
-        } catch (e: Exception) {
-            // ✅ OFFLINE MODE
-            // Do NOTHING → Room already has posts & favorites
-            Log.e("PostRepo", "Network unavailable, using cached posts")
         }
     }
 
